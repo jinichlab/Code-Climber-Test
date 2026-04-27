@@ -19,8 +19,8 @@ Made for chemistry and biochemistry students learning Python alongside the scien
 
 > Once this repo is published on GitHub Pages, the game is a single URL. You don't install anything on your computer. You only need a free Google account (which you already have if you've used Gmail or Drive).
 
-1. Open the game: **`https://YOUR_USER.github.io/codeclimber/codeclimber_rdkit.html`**
-   *(Replace `YOUR_USER` with whoever published this repo. Your instructor will give you the real link.)*
+1. Open the game: **`https://jinichlab.github.io/Code-Climber-Test/codeclimber_rdkit.html`**
+   *(Note: this URL only works once the repo is made public **or** the org has GitHub Pages enabled on a paid plan — see the "Private repo caveat" below.)*
 2. **Holds 1–3** run in your browser, no setup needed.
 3. **Holds 4–12** need a real Python kernel for RDKit and PyTorch. The game will prompt you when you reach hold 4. Click the **colab: connect** pill in the top right and follow the on-screen instructions:
    - The modal opens a Colab notebook for you in a new tab
@@ -39,7 +39,7 @@ Use this if you want to play offline, or if you don't trust hosted services. You
 Open the **Terminal** app and paste this:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main/install.sh)
 ```
 
 That command downloads the game into `~/codeclimber/`, starts a local web server, and opens your browser. You can stop the server later by closing the Terminal window.
@@ -49,7 +49,7 @@ That command downloads the game into `~/codeclimber/`, starts a local web server
 Open **PowerShell** and paste this:
 
 ```powershell
-iex (iwr -useb https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3/install.ps1)
+iex (iwr -useb https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main/install.ps1)
 ```
 
 #### Already downloaded the files?
@@ -116,6 +116,20 @@ The wall is designed for a wider browser window. Try expanding the window or rel
 
 ---
 
+## Private repo caveat
+
+This repo is currently **private**. Two distribution paths require either making it public or paying for GitHub Pro/Team:
+
+1. **The GitHub Pages URL above** — Pages is free for public repos only. On a private free-plan repo it 404s.
+2. **The one-click "Open notebook" link in Colab** (`https://colab.research.google.com/github/jinichlab/...`) — Colab can only auto-load notebooks from public repos, or after each user manually authenticates Colab to read your private repo.
+
+While the repo is private, the working distribution path is:
+- **Hand the files to students** (zip them up, share via Drive/email/Slack), and have them either run the **launch scripts** locally or **upload `runner.ipynb` to Colab manually** via *File → Upload notebook*.
+
+Flip to public any time via *Settings → General → Danger Zone → Change visibility* — none of the code in this repo is sensitive, the curriculum is generic.
+
+---
+
 ## For instructors / forking this
 
 The game is one HTML file plus a Colab notebook:
@@ -144,11 +158,11 @@ To deploy on GitHub Pages:
 
 1. Push this folder to a public GitHub repo
 2. Repo → **Settings → Pages → Source: Deploy from a branch**, pick `main` / `(root)` (or `/Module_3`)
-3. Wait ~1 minute, GitHub gives you a URL like `https://your-user.github.io/your-repo/Module_3/codeclimber_rdkit.html`
+3. Wait ~1 minute, GitHub gives you a URL like `https://jinichlab.github.io/Code-Climber-Test/codeclimber_rdkit.html`
 4. **Update `COLAB_NOTEBOOK_URL` in the HTML** to point at your runner.ipynb on GitHub:
    ```js
    const COLAB_NOTEBOOK_URL =
-     "https://colab.research.google.com/github/YOUR_USER/YOUR_REPO/blob/main/Module_3/runner.ipynb";
+     "https://colab.research.google.com/github/jinichlab/Code-Climber-Test/blob/main/runner.ipynb";
    ```
    This makes the "Open notebook" link in the connect modal a true one-click launcher.
 

@@ -3,11 +3,11 @@
 # Downloads the game files, starts a local web server, opens the browser.
 #
 # Run with:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main/install.sh)
 
 set -euo pipefail
 
-REPO_BASE="https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3"
+REPO_BASE="https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main"
 TARGET="${HOME}/codeclimber"
 PORT="${CC_PORT:-8765}"
 PAGE="codeclimber_rdkit.html"

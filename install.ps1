@@ -2,11 +2,11 @@
 # Downloads the game files, starts a local web server, opens the browser.
 #
 # Run from PowerShell:
-#   iex (iwr -useb https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3/install.ps1)
+#   iex (iwr -useb https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main/install.ps1)
 
 $ErrorActionPreference = "Stop"
 
-$RepoBase = "https://raw.githubusercontent.com/YOUR_USER/codeclimber/main/Module_3"
+$RepoBase = "https://raw.githubusercontent.com/jinichlab/Code-Climber-Test/main"
 $Target   = Join-Path $env:USERPROFILE "codeclimber"
 $Port     = if ($env:CC_PORT) { $env:CC_PORT } else { "8765" }
 $Page     = "codeclimber_rdkit.html"
