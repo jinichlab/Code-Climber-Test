@@ -11,8 +11,8 @@ $Target   = Join-Path $env:USERPROFILE "codeclimber"
 $Port     = if ($env:CC_PORT) { $env:CC_PORT } else { "8765" }
 $Page     = "codeclimber_rdkit.html"
 
-function Say($msg) { Write-Host "▸ $msg" -ForegroundColor Yellow }
-function Die($msg) { Write-Host "✗ $msg" -ForegroundColor Red; exit 1 }
+function Say($msg) { Write-Host "> $msg" -ForegroundColor Yellow }
+function Die($msg) { Write-Host "x $msg" -ForegroundColor Red; exit 1 }
 
 # 1. Python check
 Say "Checking for Python 3..."
@@ -42,7 +42,7 @@ foreach ($file in @("codeclimber.html", "codeclimber_rdkit.html", "runner.ipynb"
   try {
     Invoke-WebRequest -Uri "$RepoBase/$file" -OutFile $file -UseBasicParsing
   } catch {
-    Die "Failed to download $file. Check your internet or the repo URL."
+    Die "Failed to download $file. Check your internet connection or that the repo is public."
   }
 }
 
