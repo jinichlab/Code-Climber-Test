@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Code Climber — Module 3 (RDKit edition)</title>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<style>
+  :root {
+    --rock-1: #2a2620;
+    --rock-2: #3a322a;
+    --chalk: #f4eddc;
+    --hold-locked: #5a4a3a;
+    --hold-next: #f0a050;
+    --hold-done: #8fc56a;
+    --hold-active: #f0d050;
+    --panel-bg: #14110d;
+    --accent: #ff9050;
+  }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0a0807; color: var(--chalk);
+    font-family: -apple-system, system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) 2fr;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px;
+    background: linear-gradient(180deg, #1a1612 0%, #0a0807 100%);
+    border-bottom: 1px solid #2a221a;
+  }
+  header h1 {
+    margin: 0; font-size: 16px; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(255, 144, 80, 0.4);
+  }
+  header .meta {
+    display: flex; gap: 22px; font-size: 12px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #a89a82; align-items: center;
+  }
+  header .meta b { color: var(--chalk); margin-left: 6px; font-weight: 600; }
+  header .meta .pyo {
+    padding: 4px 10px; border: 1px solid #4a3e2e;
+    border-radius: 12px; font-size: 10px;
+  }
+  header .meta .pyo.ready { color: var(--hold-done); border-color: var(--hold-done); }
+  header .meta .pyo.loading { color: var(--hold-active); border-color: var(--hold-active); }
+  header .meta .pyo.error { color: #ff7070; border-color: #ff7070; }
+
+  /* climbing wall */
+  #wall-wrap {
+    grid-row: 2; grid-column: 1;
+    position: relative; overflow: auto;
+    background:
+      radial-gradient(ellipse at 30% 10%, rgba(255, 144, 80, 0.06), transparent 60%),
+      linear-gradient(180deg, #1a1410 0%, #0a0807 100%);
+    border-right: 1px solid #2a221a;
+  }
+  #wall {
+    display: block; width: 100%;
+  }
+  .hold-label {
+    pointer-events: none;
+    fill: var(--chalk);
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.1em;
+    opacity: 0.8;
+  }
+
+  /* code panel */
+  #panel {
+    grid-row: 2; grid-column: 2;
+    display: flex; flex-direction: column;
+    background: var(--panel-bg);
+    overflow: hidden;
+  }
+  #pitch {
+    padding: 18px 24px 18px;
+    border-bottom: 1px solid #2a221a;
+    overflow-y: auto;
+    flex: 0 0 auto;
+    max-height: 55vh;
+  }
+  #pitch .pitch-tag {
+    font-size: 10px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  #pitch h2 {
+    margin: 0 0 14px; font-size: 22px;
+    color: var(--chalk);
+  }
+  #pitch p {
+    margin: 0; font-size: 13.5px; line-height: 1.6; color: #c9bda4;
+  }
+  #pitch code {
+    background: #2a221a; padding: 1px 6px; border-radius: 3px;
+    font-size: 12.5px; color: #f0d050;
+  }
+  .pitch-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #2a221a;
+  }
+  .pitch-section:first-of-type {
+    margin-top: 0; padding-top: 0; border-top: none;
+  }
+  .pitch-section-label {
+    font-size: 10px; letter-spacing: 0.25em;
+    text-transform: uppercase; color: #7a6e5a;
+    margin-bottom: 6px;
+  }
+  .ai-prompt {
+    display: flex; gap: 10px;
+    background: #0d0a08; border: 1px solid #2a221a;
+    padding: 10px 12px; border-radius: 3px;
+    align-items: flex-start;
+  }
+  .ai-prompt span {
+    flex: 1;
+    font-family: ui-monospace, monospace;
+    font-size: 12px; line-height: 1.5;
+    color: #d8cfb8;
+  }
+  .ai-prompt button {
+    flex: 0 0 auto;
+    padding: 4px 10px; font-size: 10px;
+    background: #2a221a; color: #c9bda4;
+    border: 1px solid #4a3e2e;
+  }
+  .ai-prompt button.copied {
+    color: var(--hold-done); border-color: var(--hold-done);
+  }
+  #editor {
+    flex: 1;
+    display: grid; grid-template-rows: auto 1fr auto auto;
+    gap: 0;
+  }
+  .ed-bar {
+    padding: 8px 18px; font-size: 11px; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #7a6e5a;
+    background: #100d0a;
+    border-bottom: 1px solid #2a221a;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .ed-bar .right { display: flex; gap: 16px; }
+  .ed-bar a {
+    color: #a89a82; text-decoration: none; cursor: pointer;
+    transition: color 0.15s;
+  }
+  .ed-bar a:hover { color: var(--chalk); }
+  textarea#code {
+    width: 100%; height: 100%; box-sizing: border-box;
+    padding: 16px 18px;
+    background: #0d0a08; color: #e8e0c8;
+    border: none; resize: none; outline: none;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; line-height: 1.55;
+    tab-size: 4;
+  }
+  .ed-bar.actions {
+    background: #100d0a; padding: 12px 18px;
+    border-top: 1px solid #2a221a; border-bottom: none;
+    display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+  }
+  button {
+    background: #2a221a; color: var(--chalk);
+    border: 1px solid #4a3e2e;
+    padding: 8px 16px; font-size: 12px; letter-spacing: 0.2em;
+    text-transform: uppercase; cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  button:hover { background: #3a312a; border-color: #6a5e4a; }
+  button.primary {
+    background: var(--accent); color: #1a1208; border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover { background: #ff9d65; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #output {
+    background: #0a0805; padding: 14px 18px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+    max-height: 180px; overflow: auto;
+    border-top: 1px solid #2a221a;
+    color: #c9bda4; white-space: pre-wrap;
+  }
+  #output:empty { display: none; }
+  #output .ok { color: var(--hold-done); }
+  #output .fail { color: #ff7070; }
+  #output .stdout { color: #a89a82; }
+
+  /* victory overlay */
+  #victory {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(255, 144, 80, 0.2), rgba(0,0,0,0.95));
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.6s;
+  }
+  #victory.show { opacity: 1; pointer-events: auto; }
+  #victory h1 {
+    font-size: 56px; letter-spacing: 0.3em;
+    color: var(--accent); margin: 0 0 18px;
+    text-shadow: 0 0 30px rgba(255, 144, 80, 0.6);
+  }
+  #victory p { color: #c9bda4; font-size: 14px; letter-spacing: 0.2em; text-transform: uppercase; }
+
+  /* loading */
+  #loading {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    pointer-events: auto;
+    transition: opacity 0.4s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  #loading h2 {
+    color: var(--accent); letter-spacing: 0.4em; font-size: 18px;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  #loading p {
+    color: #a89a82; font-size: 12px; letter-spacing: 0.2em;
+    text-transform: uppercase; max-width: 420px; text-align: center;
+  }
+  .spinner {
+    width: 36px; height: 36px; margin-top: 24px;
+    border: 3px solid #2a221a; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Colab connection modal */
+  .pill-clickable { cursor: pointer; }
+  .pill-clickable:hover { filter: brightness(1.2); }
+  #colab-modal {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  #colab-modal.show { opacity: 1; pointer-events: auto; }
+  #colab-modal .bg {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.7);
+  }
+  #colab-modal .card {
+    position: relative;
+    background: #14110d;
+    border: 1px solid #4a3e2e;
+    padding: 26px 28px;
+    max-width: 520px; width: 90%;
+    border-radius: 4px;
+    color: var(--chalk);
+    max-height: 90vh; overflow-y: auto;
+  }
+  #colab-modal h2 {
+    margin: 0 0 14px; font-size: 16px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  #colab-modal p, #colab-modal ol {
+    font-size: 12.5px; line-height: 1.65; color: #c9bda4;
+    margin: 8px 0;
+  }
+  #colab-modal ol { padding-left: 22px; }
+  #colab-modal a { color: var(--accent); text-decoration: none; }
+  #colab-modal a:hover { text-decoration: underline; }
+  #colab-modal label {
+    font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+    color: #7a6e5a; display: block; margin-top: 14px;
+  }
+  #colab-modal input {
+    display: block; width: 100%; box-sizing: border-box;
+    background: #0a0805; border: 1px solid #2a221a;
+    color: var(--chalk); padding: 8px 10px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+    margin-top: 4px;
+  }
+  #colab-modal input:focus { border-color: var(--accent); outline: none; }
+  #colab-modal .actions {
+    display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px;
+  }
+  #colab-status {
+    margin-top: 14px; padding: 8px 10px;
+    font-size: 11px; letter-spacing: 0.05em;
+    border: 1px solid #2a221a; border-radius: 3px;
+    background: #0a0805; color: #a89a82;
+    white-space: pre-wrap;
+  }
+  #colab-status.ok    { color: var(--hold-done); border-color: var(--hold-done); }
+  #colab-status.fail  { color: #ff7070;          border-color: #ff7070; }
+
+  /* Intro modal — reuses the colab modal styling */
+  #intro-modal {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  #intro-modal.show { opacity: 1; pointer-events: auto; }
+  #intro-modal .bg {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(255, 144, 80, 0.12), rgba(0,0,0,0.92));
+  }
+  #intro-modal .card {
+    position: relative;
+    background: #14110d;
+    border: 1px solid #4a3e2e;
+    padding: 30px 32px;
+    max-width: 560px; width: 90%;
+    border-radius: 4px;
+    color: var(--chalk);
+    max-height: 90vh; overflow-y: auto;
+  }
+  #intro-modal h2 {
+    margin: 0 0 4px; font-size: 18px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  #intro-modal p, #intro-modal ol {
+    font-size: 13px; line-height: 1.65; color: #c9bda4;
+    margin: 8px 0;
+  }
+  #intro-modal code {
+    background: #2a221a; padding: 1px 5px; border-radius: 2px;
+    font-size: 11.5px; color: #f0d050;
+  }
+  #intro-modal .intro-route {
+    list-style: none; padding: 0; margin: 8px 0 0;
+  }
+  #intro-modal .intro-route li {
+    padding: 6px 0; border-top: 1px dashed #2a221a;
+    font-size: 13px;
+  }
+  #intro-modal .intro-route li:first-child { border-top: none; }
+  #intro-modal .intro-route .rt {
+    float: right; font-size: 9px; letter-spacing: 0.25em;
+    text-transform: uppercase; color: #7a6e5a;
+    border: 1px solid #2a221a; padding: 2px 8px;
+    border-radius: 10px;
+  }
+  #intro-modal .actions {
+    display: flex; justify-content: flex-end; margin-top: 20px;
+  }
+
+  /* wall shake when a limb releases */
+  #wall.shake { animation: wall-shake 0.45s ease-out; }
+  @keyframes wall-shake {
+    0%, 100% { transform: translate(0, 0); }
+    8%       { transform: translate(-3.5px, 1px); }
+    20%      { transform: translate(3.5px, -2.5px); }
+    35%      { transform: translate(-2.5px, 2.5px); }
+    50%      { transform: translate(2.5px, -1.5px); }
+    65%      { transform: translate(-1.5px, 1.5px); }
+    80%      { transform: translate(1px, -0.5px); }
+  }
+
+  /* hold-glow pulse for the active/next hold */
+  .hold-glow { animation: pulse 1.6s ease-in-out infinite; transform-origin: center; }
+  @keyframes pulse {
+    0%, 100% { stroke-width: 2; }
+    50%      { stroke-width: 4; }
+  }
+
+  /* chalk dust drifts faintly */
+  .chalk { animation: drift 4.5s ease-in-out infinite; }
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0); opacity: 0.45; }
+    50%      { transform: translate(0, -1.5px); opacity: 0.15; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="intro-open" class="pill-clickable" title="show route overview">◬ Code Climber · RDKit</h1>
+    <div class="meta">
+      <span>Hold<b id="m-hold">1 / 12</b></span>
+      <span>Grip<b id="m-grip">3 / 3</b></span>
+      <span class="pyo loading" id="m-pyo">python: loading…</span>
+      <span class="pyo loading pill-clickable" id="m-colab" title="connect a Colab kernel for heavy holds">colab: connect</span>
+    </div>
+  </header>
+
+  <div id="wall-wrap">
+    <svg id="wall" viewBox="0 0 500 1600" preserveAspectRatio="xMidYMin meet"></svg>
+  </div>
+
+  <div id="panel">
+    <div id="pitch">
+      <div class="pitch-tag" id="p-tag">HOLD 1 · BASE CAMP</div>
+      <h2 id="p-title">Loading…</h2>
+
+      <div class="pitch-section">
+        <div class="pitch-section-label">Task</div>
+        <p id="p-body">Preparing the wall.</p>
+      </div>
+
+      <div class="pitch-section" id="p-why-wrap">
+        <div class="pitch-section-label">Why this matters</div>
+        <p id="p-why"></p>
+      </div>
+
+      <div class="pitch-section" id="p-ai-wrap">
+        <div class="pitch-section-label">Try asking an AI</div>
+        <div class="ai-prompt">
+          <span id="p-ai"></span>
+          <button id="p-ai-copy" type="button" title="copy to clipboard">copy</button>
+        </div>
+      </div>
+    </div>
+    <div id="editor">
+      <div class="ed-bar">
+        <span>code · python</span>
+        <div class="right">
+          <a id="reset-btn">↻ reset</a>
+          <a id="hint-btn">? hint</a>
+        </div>
+      </div>
+      <textarea id="code" spellcheck="false" autocomplete="off"></textarea>
+      <div class="ed-bar actions">
+        <button id="run-btn" class="primary">▶ send it (Ctrl+Enter)</button>
+      </div>
+      <div id="output"></div>
+    </div>
+  </div>
+</div>
+
+<div id="victory">
+  <h1>SUMMIT</h1>
+  <p>you topped out the route</p>
+  <p style="margin-top:24px;color:var(--accent);">click anywhere to climb again</p>
+</div>
+
+<div id="intro-modal" class="show">
+  <div class="bg"></div>
+  <div class="card">
+    <h2>◬ The Climb · Module 3</h2>
+    <p style="font-size:11px;letter-spacing:0.25em;text-transform:uppercase;color:#7a6e5a;margin-bottom:14px;">
+      Cheminformatics &amp; Graph Neural Networks
+    </p>
+    <p>You're climbing a 12-hold route through the foundational skills of cheminformatics —
+       parsing molecules, computing descriptors, building fingerprints, measuring chemical similarity,
+       and ending with the prep work for a graph neural network that learns from molecular structure.</p>
+    <p><b>How it works.</b> Each hold is a small code challenge. Get it right and your climber moves up.
+       Get it wrong <b>three times</b> in a row and they fall back to base camp — so think before you send it.</p>
+    <p style="margin-top:12px;"><b>The route:</b></p>
+    <ol class="intro-route">
+      <li><b>1–3</b> &nbsp;Base camp · parsing SMILES strings <span class="rt">browser</span></li>
+      <li><b>4–5</b> &nbsp;Real RDKit · molecules &amp; molecular weight <span class="rt">colab</span></li>
+      <li><b>6–7</b> &nbsp;Morgan fingerprints &amp; Tanimoto similarity <span class="rt">colab</span></li>
+      <li><b>8</b> &nbsp;&nbsp;&nbsp;Pandas + RDKit pipelines <span class="rt">colab</span></li>
+      <li><b>9–10</b> Train/test splits &amp; regression metrics <span class="rt">colab</span></li>
+      <li><b>11–12</b> Graph prep &amp; pooling for GNNs (PyTorch) <span class="rt">colab</span></li>
+    </ol>
+    <p style="font-size:12px;margin-top:14px;">
+      Holds 4–12 run on a real Python kernel — connect your free Google Colab when prompted
+      (the <code>colab</code> pill in the header).
+    </p>
+    <div class="actions">
+      <button id="intro-start" class="primary">Start Climbing</button>
+    </div>
+  </div>
+</div>
+
+<div id="colab-modal">
+  <div class="bg"></div>
+  <div class="card">
+    <h2>◬ Connect Colab</h2>
+    <p>Some holds need a real Python kernel for libraries the browser can't run
+       — RDKit, PyTorch, Transformers, GPU. Use your free Google Colab account
+       as the backend; nothing runs on a server you don't own.</p>
+    <ol>
+      <li>Open <a id="colab-nb-link" href="#" target="_blank">the runner notebook</a>
+          (or upload <code>runner.ipynb</code> from this folder via
+          <i>File → Upload notebook</i>).</li>
+      <li>In Colab: <i>Runtime → Run all</i>. First run installs deps (~1–3 min).
+          For GPU holds, also do <i>Runtime → Change runtime type → T4 GPU</i> first.</li>
+      <li>The last cell prints a <b>URL</b> and a <b>Token</b>. Paste them below.</li>
+    </ol>
+    <label for="colab-url-input">Colab URL</label>
+    <input id="colab-url-input" placeholder="https://something-something.trycloudflare.com" autocomplete="off" spellcheck="false">
+    <label for="colab-token-input">Token</label>
+    <input id="colab-token-input" placeholder="abcDEF123…" autocomplete="off" spellcheck="false">
+    <div class="actions">
+      <button id="colab-disconnect">Disconnect</button>
+      <button id="colab-close">Close</button>
+      <button id="colab-connect" class="primary">Test &amp; Save</button>
+    </div>
+    <div id="colab-status">not connected</div>
+  </div>
+</div>
+
+<div id="loading">
+  <h2>Loading Pyodide</h2>
+  <p>fetching the python runtime &amp; rdkit · ~10–20 seconds on first load</p>
+  <div class="spinner"></div>
+</div>
+
+<script>
+// ─────── Holds (curriculum from Module 3) ───────
+// Each hold: title, tag, prompt (HTML), starter code, verify (Python that asserts),
+// and optional hint. The verify code runs after the user code in the same globals.
+// Special vars available to verify: _stdout (string), _user_globals (dict).
+const HOLDS = [
+  {
+    title: "Base Camp",
+    tag: "WARM-UP",
+    runtime: "pyodide",
+    why: `Every cheminformatics tutorial starts with a sanity check that your environment actually runs Python. Before you can compute molecular weights or build fingerprints, the simplest thing has to work: print a string.`,
+    aiPrompt: `How do I print an exact string in Python with no quotes around it?`,
+    prompt: `Tie in. Print the string <code>Cheminformatics!</code> exactly - no quotes, no newline tricks.`,
+    starter: `# print the line
+`,
+    verify: `assert _stdout.strip() == "Cheminformatics!", f"got: {_stdout!r}"`,
+    hint: `Just call print("Cheminformatics!").`,
+  },
+  {
+    title: "Strip the SMILES",
+    tag: "EX 1 - DATA FORMAT",
+    runtime: "pyodide",
+    why: `Real chemistry datasets — Rhea, ChEMBL, ZINC, PubChem — ship as TSV/CSV files where each row has an ID, a name, and a SMILES (plus often a hundred other columns). Step zero of every cheminformatics pipeline is carving the SMILES out of that row before you can do any actual chemistry.`,
+    aiPrompt: `How do I split a tab-separated string in Python and grab the third field?`,
+    prompt: `The Rhea file rows look like <code>5	Compound 5	CC(C)CC[C@H](O)...</code>.
+            The variable <code>line</code> is set for you. Split on tabs and <b>print</b> the third field (the SMILES).`,
+    starter: `line = "5	Compound 5	CC(C)CC[C@H](O)C(C)C"
+# print the smiles
+`,
+    verify: `assert _stdout.strip() == "CC(C)CC[C@H](O)C(C)C", f"got: {_stdout!r}"`,
+    hint: `Use line.split("	")[2].`,
+  },
+  {
+    title: "Read the Pitch",
+    tag: "EX 2 - LOAD",
+    runtime: "pyodide",
+    why: `Loading a steroid file (or any chemical dataset) means iterating line by line and extracting the SMILES column from each row. Most cheminformatics scripts start with exactly this loop. Once you have a list of SMILES strings, you can hand them to RDKit one by one.`,
+    aiPrompt: `Loop over each line of a multi-line string and pull out the third tab-separated field; build a list in order.`,
+    prompt: `Below is a multi-line string <code>raw</code> mimicking the steroid file (3 lines, tab-separated).
+            Build a list <code>smiles</code> containing only the SMILES strings, in order.`,
+    starter: `raw = """1	Compound 1	CCO
+2	Compound 2	CCN
+3	Compound 3	CCC"""
+
+# build a list called \`smiles\`
+smiles = []
+`,
+    verify: `
+smiles = _user_globals["smiles"]
+assert smiles == ["CCO", "CCN", "CCC"], f"got: {smiles!r}"
+`,
+    hint: `Loop raw.splitlines(); split each line on "	"; append the third field.`,
+  },
+  {
+    title: "First Mol",
+    tag: "EX 2 - RDKIT",
+    runtime: "remote",
+    why: `A SMILES string like <code>c1ccccc1</code> is just text until something parses it. <code>Chem.MolFromSmiles</code> turns the string into an actual <b>molecular graph</b> — atoms with elements, bonds with orders, aromaticity perception, formal charges. Heavy-atom count is your first sanity check that parsing worked: benzene has 6 carbons (no implicit hydrogens) so <code>GetNumAtoms()</code> should return 6.`,
+    aiPrompt: `Using rdkit, parse the SMILES 'c1ccccc1' and print the number of heavy atoms.`,
+    prompt: `Now with REAL RDKit on your Colab kernel.
+            Parse benzene <code>c1ccccc1</code> with <code>rdkit.Chem.MolFromSmiles</code>
+            and <b>print</b> the heavy-atom count (RDKit's default).`,
+    starter: `from rdkit import Chem
+mol = Chem.MolFromSmiles("c1ccccc1")
+# print mol.GetNumAtoms()
+`,
+    verify: `assert _stdout.strip() == "6", f"got: {_stdout!r}"`,
+    hint: `print(mol.GetNumAtoms()) - heavy atoms only by default.`,
+  },
+  {
+    title: "Weigh In",
+    tag: "EX 2 - DESCRIPTORS",
+    runtime: "remote",
+    why: `Molecular weight is the most basic descriptor in cheminformatics — and one of the Lipinski Rule-of-Five filters for drug-likeness (oral drugs typically have MW ≤ 500). Caffeine's exact MW (~194.19 g/mol) comes from RDKit summing actual atomic weights from the parsed structure, including implicit hydrogens. If your computed MW disagrees with reality, your SMILES probably parsed wrong.`,
+    aiPrompt: `How do I compute the molecular weight of a SMILES with rdkit Descriptors and round to 2 decimals?`,
+    prompt: `Compute the exact molecular weight of caffeine
+            <code>CN1C=NC2=C1C(=O)N(C(=O)N2C)C</code> using
+            <code>rdkit.Chem.Descriptors.MolWt</code>.
+            Round to 2 decimals and assign to <code>mw</code>.`,
+    starter: `from rdkit import Chem
+from rdkit.Chem import Descriptors
+
+caffeine = Chem.MolFromSmiles("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
+mw = None  # round(Descriptors.MolWt(caffeine), 2)
+`,
+    verify: `
+mw = _user_globals["mw"]
+assert mw is not None and abs(mw - 194.19) < 0.05, f"mw was {mw!r}, expected ~194.19"
+`,
+    hint: `Descriptors.MolWt(caffeine) is ~194.19; then round(..., 2).`,
+  },
+  {
+    title: "Morgan Fingers",
+    tag: "EX 3 - FINGERPRINTS",
+    runtime: "remote",
+    why: `A <b>Morgan (ECFP) fingerprint</b> encodes each atom's local neighborhood out to a given radius — atom 0 sees its immediate neighbors, then their neighbors, and so on. Each unique environment gets hashed to a bit. Two molecules that share substructures share bits. This is how essentially all classical QSAR pipelines turn a variable-size molecule into a fixed-length feature vector that ML models can consume.`,
+    aiPrompt: `Generate a Morgan fingerprint with rdkit (radius 2, 1024 bits) for the SMILES 'CCO' and count how many bits are on.`,
+    prompt: `Generate a Morgan fingerprint (radius 2, 1024 bits) for ethanol <code>CCO</code> using
+            <code>AllChem.GetMorganFingerprintAsBitVect</code>.
+            Assign the on-bit count to <code>nbits</code>.`,
+    starter: `from rdkit import Chem
+from rdkit.Chem import AllChem
+
+mol = Chem.MolFromSmiles("CCO")
+fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=1024)
+
+nbits = None  # how many bits are on?
+`,
+    verify: `
+fp = _user_globals["fp"]
+nbits = _user_globals["nbits"]
+real = fp.GetNumOnBits()
+assert nbits == real, f"got {nbits}, real on-bits = {real}"
+assert 1 <= nbits <= 64, f"that doesn't look like a Morgan FP for ethanol: {nbits}"
+`,
+    hint: `fp.GetNumOnBits() - or sum(fp.ToList()).`,
+  },
+  {
+    title: "Twin Holds",
+    tag: "EX 3 - TANIMOTO",
+    runtime: "remote",
+    why: `<b>Tanimoto similarity</b> on Morgan fingerprints is the de-facto chemical similarity metric — used in virtual screening, scaffold hopping, lead optimization, and patent searches. A Tanimoto > 0.7 typically means two molecules are structurally analogous; &lt; 0.4 means they're meaningfully different. Ethanol and propanol differ by one CH₂, so we expect their Tanimoto to be moderate but well above zero.`,
+    aiPrompt: `Compute the Tanimoto similarity between Morgan fingerprints of ethanol (CCO) and propanol (CCCO) using rdkit DataStructs; round to 3 decimals.`,
+    prompt: `Compute <b>Tanimoto similarity</b> between Morgan fingerprints (r=2, 1024 bits)
+            of ethanol <code>CCO</code> and propanol <code>CCCO</code> using
+            <code>DataStructs.TanimotoSimilarity</code>. Round to 3 decimals;
+            assign to <code>sim</code>.`,
+    starter: `from rdkit import Chem
+from rdkit.Chem import AllChem, DataStructs
+
+a = AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles("CCO"),  2, 1024)
+b = AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles("CCCO"), 2, 1024)
+
+sim = None  # DataStructs.TanimotoSimilarity(a, b), rounded to 3
+`,
+    verify: `
+from rdkit import Chem
+from rdkit.Chem import AllChem, DataStructs
+sim = _user_globals["sim"]
+real = round(DataStructs.TanimotoSimilarity(
+    AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles("CCO"),  2, 1024),
+    AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles("CCCO"), 2, 1024),
+), 3)
+assert abs(sim - real) < 1e-3, f"got {sim}, expected {real}"
+`,
+    hint: `DataStructs.TanimotoSimilarity(a, b), then round to 3.`,
+  },
+  {
+    title: "Filter the Crag",
+    tag: "EX 2 - PANDAS + RDKIT",
+    runtime: "remote",
+    why: `Real datasets need preprocessing — drop salts, drop fragments, drop molecules outside your domain. Filtering by heavy-atom count is one of the most common cleanups: less than ~10 heavy atoms is fragment territory, not a drug-like molecule. Pandas + RDKit is the workhorse pattern: load SMILES into a DataFrame, apply RDKit per row to compute a property, then filter on it.`,
+    aiPrompt: `Given a pandas DataFrame with a SMILES column, add a column of heavy-atom counts using rdkit, then return the SMILES where the count is at least 3.`,
+    prompt: `A DataFrame <code>df</code> with a <code>SMILES</code> column is set up.
+            Add a column <code>n_atoms</code> with the <b>real</b> heavy-atom count
+            (<code>Chem.MolFromSmiles(s).GetNumAtoms()</code>), then assign to
+            <code>big</code> the SMILES list where <code>n_atoms &gt;= 3</code>, in original order.`,
+    starter: `import pandas as pd
+from rdkit import Chem
+
+df = pd.DataFrame({"SMILES": ["C", "CC", "CCO", "CCN", "c1ccccc1"]})
+# add df["n_atoms"], then build \`big\`
+big = []
+`,
+    verify: `
+big = _user_globals["big"]
+assert big == ["CCO", "CCN", "c1ccccc1"], f"got {big!r}"
+df = _user_globals["df"]
+assert "n_atoms" in df.columns, "you didn't add the n_atoms column"
+assert list(df["n_atoms"]) == [1, 2, 3, 3, 6], f"n_atoms wrong: {list(df['n_atoms'])}"
+`,
+    hint: `df["n_atoms"] = df["SMILES"].apply(lambda s: Chem.MolFromSmiles(s).GetNumAtoms()); df.loc[df.n_atoms >= 3, "SMILES"].tolist().`,
+  },
+  {
+    title: "The Split",
+    tag: "EX 5 - TRAIN/TEST",
+    runtime: "remote",
+    why: `If your model has seen the test molecules during training, your reported accuracy is fiction. <code>train_test_split</code> partitions your data once and gives you two disjoint sets — fit on train, evaluate on test. <code>random_state</code> makes the split reproducible so your collaborators (and your future self) get the same numbers. In real cheminformatics you'd often go further with scaffold splits to test extrapolation.`,
+    aiPrompt: `Use sklearn train_test_split with test_size=0.2 and random_state=77 to split arrays X and y, and tell me the length of y_test.`,
+    prompt: `Use <code>sklearn.model_selection.train_test_split</code> with
+            <code>random_state=77</code> and <code>test_size=0.2</code>.
+            Split <code>X</code> (10 rows) and <code>y</code>.
+            Assign the test set length to <code>n_test</code>.`,
+    starter: `import numpy as np
+from sklearn.model_selection import train_test_split
+
+X = np.arange(10).reshape(-1, 1)
+y = np.arange(10) * 2.0
+
+# split, then assign n_test (length of y_test)
+n_test = None
+`,
+    verify: `
+n_test = _user_globals["n_test"]
+assert n_test == 2, f"got {n_test}, expected 2 (20% of 10)"
+`,
+    hint: `X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=77); n_test = len(y_te).`,
+  },
+  {
+    title: "Score the Send",
+    tag: "EX 5 - METRICS",
+    runtime: "remote",
+    why: `<b>RMSE</b> (root-mean-squared error) is the standard regression metric — same units as your target, lower is better, sensitive to large errors because it squares them. Almost every QSAR paper reports RMSE alongside R². For predicting a property like solubility (in log mol/L), an RMSE of 0.5 means typical predictions land within roughly half a log unit of the truth.`,
+    aiPrompt: `Compute RMSE between numpy arrays y_true and y_pred and round to 4 decimals.`,
+    prompt: `Compute RMSE between <code>y_true = [1.0, 2.0, 3.0, 4.0]</code> and
+            <code>y_pred = [1.2, 1.9, 3.1, 3.7]</code>. Round to 4 decimals; assign to <code>rmse</code>.`,
+    starter: `import numpy as np
+y_true = np.array([1.0, 2.0, 3.0, 4.0])
+y_pred = np.array([1.2, 1.9, 3.1, 3.7])
+
+rmse = None
+`,
+    verify: `
+import numpy as np
+rmse = _user_globals["rmse"]
+expected = round(float(np.sqrt(np.mean((np.array([1.0,2.0,3.0,4.0]) - np.array([1.2,1.9,3.1,3.7]))**2))), 4)
+assert abs(rmse - expected) < 1e-4, f"got {rmse}, expected {expected}"
+`,
+    hint: `np.sqrt(np.mean((y_true - y_pred) ** 2)), then round to 4.`,
+  },
+  {
+    title: "Graph Crossing",
+    tag: "EX 6 - GNN PREP",
+    runtime: "remote",
+    why: `Graph Neural Networks treat molecules as exactly what they are: graphs. Atoms are nodes, bonds are edges. PyTorch Geometric's standard format is <code>edge_index</code> shaped <code>[2, num_edges]</code> — first row is source atom indices, second row is destination. Bonds are undirected, so each chemical bond becomes <b>two</b> entries in edge_index, one in each direction. This is the bridge that turns an RDKit molecule into something PyTorch can do message passing on.`,
+    aiPrompt: `Given an rdkit molecule from 'CCO', walk mol.GetBonds() and build a PyG-style edge_index = [src, dst] with both directions for each bond.`,
+    prompt: `A molecule <b>is</b> a graph. Build the <code>edge_index</code> for ethanol
+            <code>CCO</code> as <code>[src, dst]</code>, with <b>both directions</b> for each bond,
+            walking <code>mol.GetBonds()</code> in RDKit's order.`,
+    starter: `from rdkit import Chem
+mol = Chem.MolFromSmiles("CCO")
+
+src, dst = [], []
+for b in mol.GetBonds():
+    pass  # for each bond add (i, j) and (j, i) to src/dst
+edge_index = [src, dst]
+`,
+    verify: `
+ei = _user_globals["edge_index"]
+assert ei == [[0, 1, 1, 2], [1, 0, 2, 1]], f"got {ei!r}"
+`,
+    hint: `i, j = b.GetBeginAtomIdx(), b.GetEndAtomIdx(); src += [i, j]; dst += [j, i].`,
+  },
+  {
+    title: "Top-Out - Pool",
+    tag: "EX 6 - GLOBAL POOL",
+    runtime: "remote",
+    why: `After several rounds of message passing, every atom in your molecule has a learned embedding vector that 'knows about' its neighborhood. But you want to predict a <b>molecule-level</b> property — solubility, binding affinity, toxicity. So you have to <i>pool</i> the per-atom embeddings down to one vector per molecule. Mean pooling is the simplest; max pooling and attention pooling are common alternatives. The <code>batch</code> tensor tells PyTorch which atoms belong to which molecule when you've stacked multiple graphs together.`,
+    aiPrompt: `Given a PyTorch tensor of node embeddings (shape [N, F]) and a batch index tensor of length N, compute the mean embedding per graph as a list of lists, rounded to 2 decimals.`,
+    prompt: `Pool node embeddings to a graph-level vector with PyTorch.
+            Compute the <b>mean</b> embedding per graph as a 2x3 list of lists, rounded to 2 decimals.
+            Assign to <code>graph_emb</code>.`,
+    starter: `import torch
+
+node_emb = torch.tensor([
+    [1.0, 2.0, 3.0],   # graph 0
+    [3.0, 4.0, 5.0],   # graph 0
+    [0.0, 1.0, 0.0],   # graph 1
+    [2.0, 1.0, 2.0],   # graph 1
+])
+batch = torch.tensor([0, 0, 1, 1])
+
+graph_emb = []  # 2x3 list of lists, rounded to 2 decimals
+`,
+    verify: `
+ge = _user_globals["graph_emb"]
+expected = [[2.0, 3.0, 4.0], [1.0, 1.0, 1.0]]
+assert ge == expected, f"got {ge!r}, expected {expected}"
+`,
+    hint: `for g in [0, 1]: rows = node_emb[batch == g]; row = [round(float(v), 2) for v in rows.mean(dim=0)]; graph_emb.append(row).`,
+  },
+];
+
+// ─────── Wall layout ───────
+const wall = document.getElementById('wall');
+const wallWrap = document.getElementById('wall-wrap');
+const NS = 'http://www.w3.org/2000/svg';
+const WALL_W = 500;
+const HOLD_GAP = 95;
+const GROUND_PAD = 80;        // ground area below the first hold
+const WALL_H = 140 + (HOLDS.length - 1) * HOLD_GAP + GROUND_PAD + 80;
+wall.setAttribute('viewBox', `0 0 ${WALL_W} ${WALL_H}`);
+
+// rocky background
+function buildWall() {
+  const defs = document.createElementNS(NS, 'defs');
+  // rock gradient
+  const lg = document.createElementNS(NS, 'linearGradient');
+  lg.setAttribute('id', 'rockGrad');
+  lg.setAttribute('x1', '0'); lg.setAttribute('y1', '0');
+  lg.setAttribute('x2', '0'); lg.setAttribute('y2', '1');
+  lg.innerHTML = `
+    <stop offset="0" stop-color="#3a322a"/>
+    <stop offset="1" stop-color="#1a1410"/>
+  `;
+  defs.appendChild(lg);
+  // hold gradient
+  const hg = document.createElementNS(NS, 'radialGradient');
+  hg.setAttribute('id', 'holdGrad');
+  hg.innerHTML = `
+    <stop offset="0" stop-color="#fff" stop-opacity="0.4"/>
+    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  `;
+  defs.appendChild(hg);
+  wall.appendChild(defs);
+
+  const bg = document.createElementNS(NS, 'rect');
+  bg.setAttribute('x', 0); bg.setAttribute('y', 0);
+  bg.setAttribute('width', WALL_W); bg.setAttribute('height', WALL_H);
+  bg.setAttribute('fill', 'url(#rockGrad)');
+  wall.appendChild(bg);
+
+  // texture noise — random rock chunks
+  for (let i = 0; i < 200; i++) {
+    const r = document.createElementNS(NS, 'circle');
+    r.setAttribute('cx', Math.random() * WALL_W);
+    r.setAttribute('cy', Math.random() * WALL_H);
+    r.setAttribute('r', Math.random() * 18 + 4);
+    r.setAttribute('fill', '#000');
+    r.setAttribute('opacity', Math.random() * 0.12);
+    wall.appendChild(r);
+  }
+  for (let i = 0; i < 80; i++) {
+    const r = document.createElementNS(NS, 'circle');
+    r.setAttribute('cx', Math.random() * WALL_W);
+    r.setAttribute('cy', Math.random() * WALL_H);
+    r.setAttribute('r', Math.random() * 8 + 2);
+    r.setAttribute('fill', '#fff');
+    r.setAttribute('opacity', Math.random() * 0.05);
+    wall.appendChild(r);
+  }
+  // jagged crack lines snaking down the wall
+  for (let i = 0; i < 6; i++) {
+    const crack = document.createElementNS(NS, 'path');
+    let x = 40 + Math.random() * (WALL_W - 80);
+    let y = Math.random() * WALL_H * 0.3;
+    let d = `M ${x} ${y}`;
+    const segs = 12 + Math.floor(Math.random() * 10);
+    for (let s = 0; s < segs; s++) {
+      x += (Math.random() - 0.5) * 60;
+      y += 30 + Math.random() * 60;
+      d += ` L ${x} ${y}`;
+    }
+    crack.setAttribute('d', d);
+    crack.setAttribute('stroke', '#0a0805');
+    crack.setAttribute('stroke-width', 1 + Math.random() * 1.5);
+    crack.setAttribute('fill', 'none');
+    crack.setAttribute('opacity', 0.5);
+    wall.appendChild(crack);
+  }
+  // ground at the bottom (climber starts here)
+  const ground = document.createElementNS(NS, 'rect');
+  ground.setAttribute('x', 0); ground.setAttribute('y', WALL_H - 60);
+  ground.setAttribute('width', WALL_W); ground.setAttribute('height', 60);
+  ground.setAttribute('fill', '#0a0805');
+  wall.appendChild(ground);
+  const groundLine = document.createElementNS(NS, 'line');
+  groundLine.setAttribute('x1', 0); groundLine.setAttribute('y1', WALL_H - 60);
+  groundLine.setAttribute('x2', WALL_W); groundLine.setAttribute('y2', WALL_H - 60);
+  groundLine.setAttribute('stroke', '#3a2a1a');
+  groundLine.setAttribute('stroke-width', 1.5);
+  wall.appendChild(groundLine);
+  for (let i = 0; i < 12; i++) {
+    const peb = document.createElementNS(NS, 'ellipse');
+    peb.setAttribute('cx', Math.random() * WALL_W);
+    peb.setAttribute('cy', WALL_H - 50 + Math.random() * 30);
+    peb.setAttribute('rx', 2 + Math.random() * 4);
+    peb.setAttribute('ry', 1 + Math.random() * 2);
+    peb.setAttribute('fill', '#1a1410');
+    wall.appendChild(peb);
+  }
+
+  // chalk smudges (climbers leave these)
+  for (let i = 0; i < 30; i++) {
+    const c = document.createElementNS(NS, 'ellipse');
+    c.setAttribute('cx', Math.random() * WALL_W);
+    c.setAttribute('cy', Math.random() * WALL_H);
+    c.setAttribute('rx', 6 + Math.random() * 14);
+    c.setAttribute('ry', 3 + Math.random() * 6);
+    c.setAttribute('fill', '#fff');
+    c.setAttribute('opacity', 0.04 + Math.random() * 0.05);
+    wall.appendChild(c);
+  }
+}
+buildWall();
+
+// hold positions: zigzag from bottom up. holds are TIGHTER (~arm reach apart)
+const HOLD_POS = HOLDS.map((_, i) => {
+  const y = WALL_H - GROUND_PAD - i * HOLD_GAP;
+  // gentle zigzag — keep horizontal travel within an arm-length so the climber
+  // can always reach the next hold without "jumping."
+  const phase = (i % 4);
+  const xs = [200, 280, 320, 240];
+  const x = xs[phase] + (i % 2 ? 10 : -10);
+  return { x, y };
+});
+
+// virtual ground beneath hold 0 — climber's feet rest here at start
+const GROUND_POS = { x: HOLD_POS[0].x, y: WALL_H - 30 };
+
+// ─── ROUTE: every position the climber actually grips (checkpoints + intermediates)
+// 2 intermediate holds between each pair of checkpoints → step ~32px → human-sized body
+const INTERMEDIATES = 2;
+const ROUTE = [];
+const CHECKPOINT_AT = [];        // ROUTE index for each curriculum hold (0..11)
+for (let k = 0; k < HOLD_POS.length; k++) {
+  if (k > 0) {
+    const a = HOLD_POS[k - 1], b = HOLD_POS[k];
+    for (let s = 1; s <= INTERMEDIATES; s++) {
+      const t = s / (INTERMEDIATES + 1);
+      // perpendicular wobble so intermediates aren't on a perfect line
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const wob = Math.sin(s * 2.3 + k * 1.7) * 16;
+      const px = -dy / len * wob, py = dx / len * wob;
+      ROUTE.push({
+        x: a.x + dx * t + px,
+        y: a.y + dy * t + py,
+        isCheckpoint: false,
+        holdIdx: -1,
+      });
+    }
+  }
+  CHECKPOINT_AT.push(ROUTE.length);
+  ROUTE.push({ x: HOLD_POS[k].x, y: HOLD_POS[k].y, isCheckpoint: true, holdIdx: k });
+}
+
+// summit marker
+const summit = document.createElementNS(NS, 'g');
+{
+  const sx = WALL_W / 2, sy = HOLD_POS[HOLD_POS.length - 1].y - 60;
+  const tri = document.createElementNS(NS, 'polygon');
+  tri.setAttribute('points', `${sx},${sy} ${sx-22},${sy+30} ${sx+22},${sy+30}`);
+  tri.setAttribute('fill', '#ff9050');
+  tri.setAttribute('opacity', '0.5');
+  summit.appendChild(tri);
+  const txt = document.createElementNS(NS, 'text');
+  txt.setAttribute('x', sx); txt.setAttribute('y', sy - 10);
+  txt.setAttribute('text-anchor', 'middle');
+  txt.setAttribute('fill', '#ff9050');
+  txt.setAttribute('font-size', 13);
+  txt.setAttribute('font-family', 'ui-monospace, monospace');
+  txt.setAttribute('letter-spacing', '0.2em');
+  txt.textContent = 'SUMMIT';
+  summit.appendChild(txt);
+}
+wall.appendChild(summit);
+
+// chalk path snakes through every hold on the route
+const route = document.createElementNS(NS, 'path');
+route.setAttribute('stroke', '#f4eddc');
+route.setAttribute('stroke-width', '1.2');
+route.setAttribute('stroke-dasharray', '2 5');
+route.setAttribute('fill', 'none');
+route.setAttribute('opacity', '0.18');
+{
+  let d = `M ${ROUTE[0].x} ${ROUTE[0].y}`;
+  for (let i = 1; i < ROUTE.length; i++) {
+    d += ` L ${ROUTE[i].x} ${ROUTE[i].y}`;
+  }
+  route.setAttribute('d', d);
+}
+wall.appendChild(route);
+
+// render intermediate (non-checkpoint) holds — smaller, unlabeled rocks
+ROUTE.forEach((p, r) => {
+  if (p.isCheckpoint) return;
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('transform', `translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`);
+
+  const shadow = document.createElementNS(NS, 'ellipse');
+  shadow.setAttribute('cx', 0.5); shadow.setAttribute('cy', 3);
+  shadow.setAttribute('rx', 7); shadow.setAttribute('ry', 1.5);
+  shadow.setAttribute('fill', '#000'); shadow.setAttribute('opacity', '0.45');
+  g.appendChild(shadow);
+
+  const back = document.createElementNS(NS, 'polygon');
+  back.setAttribute('points', makeHoldPoints(r, 0.65));
+  back.setAttribute('fill', '#0d0a07');
+  back.setAttribute('transform', 'translate(0.5, 1)');
+  g.appendChild(back);
+
+  const poly = document.createElementNS(NS, 'polygon');
+  poly.setAttribute('points', makeHoldPoints(r, 0.6));
+  poly.setAttribute('fill', '#4a3e2e');
+  poly.setAttribute('stroke', '#050302');
+  poly.setAttribute('stroke-width', '0.6');
+  g.appendChild(poly);
+
+  const hl = document.createElementNS(NS, 'ellipse');
+  hl.setAttribute('cx', -1.5); hl.setAttribute('cy', -1.5);
+  hl.setAttribute('rx', 3); hl.setAttribute('ry', 2);
+  hl.setAttribute('fill', 'url(#holdGrad)');
+  g.appendChild(hl);
+
+  wall.appendChild(g);
+});
+
+// hold groups — hand-sized climbing holds (jugs, crimps, slopers, pinches)
+function makeHoldPoints(i, scale = 1) {
+  const type = i % 4;     // 0:jug, 1:crimp, 2:sloper, 3:pinch
+  const N = 12;
+  const pts = [];
+  for (let k = 0; k < N; k++) {
+    const ang = (k / N) * Math.PI * 2;
+    let rx, ry;
+    if (type === 0)      { rx = 11; ry = 8; }    // jug — chunky handle
+    else if (type === 1) { rx = 13; ry = 4; }    // crimp — thin edge
+    else if (type === 2) { rx = 9;  ry = 9; }    // sloper — round
+    else                 { rx = 5;  ry = 11; }   // pinch — vertical
+    const wob = (Math.sin(ang * 3 + i) + Math.cos(ang * 5 + i * 2)) * 1.0;
+    const x = Math.cos(ang) * (rx + wob) * scale;
+    const y = Math.sin(ang) * (ry + wob) * scale;
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+
+const holdGroups = HOLD_POS.map((p, i) => {
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+  g.style.cursor = 'pointer';
+  g.dataset.idx = i;
+
+  // pulse ring (only visible on active/next hold)
+  const glow = document.createElementNS(NS, 'circle');
+  glow.setAttribute('cx', 0); glow.setAttribute('cy', 0);
+  glow.setAttribute('r', 18);
+  glow.setAttribute('fill', 'none');
+  glow.setAttribute('stroke', 'var(--hold-active)');
+  glow.setAttribute('stroke-width', '1.6');
+  glow.setAttribute('opacity', '0');
+  glow.setAttribute('class', 'hold-glow');
+  g.appendChild(glow);
+
+  // ground shadow
+  const shadow = document.createElementNS(NS, 'ellipse');
+  shadow.setAttribute('cx', 1); shadow.setAttribute('cy', 6);
+  shadow.setAttribute('rx', 12); shadow.setAttribute('ry', 2.5);
+  shadow.setAttribute('fill', '#000'); shadow.setAttribute('opacity', '0.5');
+  g.appendChild(shadow);
+
+  // dark back-layer (hold base, deeper into wall)
+  const back = document.createElementNS(NS, 'polygon');
+  back.setAttribute('points', makeHoldPoints(i, 1.08));
+  back.setAttribute('fill', '#0d0a07');
+  back.setAttribute('transform', 'translate(1, 2)');
+  g.appendChild(back);
+
+  // main rock face
+  const poly = document.createElementNS(NS, 'polygon');
+  poly.setAttribute('points', makeHoldPoints(i));
+  poly.setAttribute('class', 'hold-rock');
+  poly.setAttribute('fill', 'var(--hold-locked)');
+  poly.setAttribute('stroke', '#050302');
+  poly.setAttribute('stroke-width', '0.8');
+  g.appendChild(poly);
+
+  // top-left light wash for 3D feel
+  const hl = document.createElementNS(NS, 'ellipse');
+  hl.setAttribute('cx', -3); hl.setAttribute('cy', -3);
+  hl.setAttribute('rx', 6); hl.setAttribute('ry', 4);
+  hl.setAttribute('fill', 'url(#holdGrad)');
+  g.appendChild(hl);
+
+  // label outside the hold (number + name)
+  const labelSide = i % 2 ? 1 : -1;
+  const label = document.createElementNS(NS, 'text');
+  label.setAttribute('class', 'hold-label');
+  label.setAttribute('text-anchor', labelSide > 0 ? 'start' : 'end');
+  label.setAttribute('x', labelSide * 22);
+  label.setAttribute('y', 3);
+  label.textContent = `${i + 1} · ${HOLDS[i].title.toUpperCase()}`;
+  g.appendChild(label);
+
+  g.addEventListener('click', () => {
+    if (i <= state.current) selectHold(i);
+  });
+  wall.appendChild(g);
+  return { g, poly, glow };
+});
+
+// ─────── Climber: 4-limb dynamic pose ───────
+// limbs reach for SPECIFIC hold positions in absolute SVG coordinates.
+// the body (torso/head) sits between hands and feet automatically.
+
+// rope behind everything
+const rope = document.createElementNS(NS, 'path');
+rope.setAttribute('stroke', '#d83020');
+rope.setAttribute('stroke-width', '1.6');
+rope.setAttribute('fill', 'none');
+rope.setAttribute('stroke-linecap', 'round');
+rope.setAttribute('opacity', '0.8');
+wall.appendChild(rope);
+
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+const climber = document.createElementNS(NS, 'g');
+climber.setAttribute('class', 'climber');
+wall.appendChild(climber);
+
+// FIXED-size body. Limbs bend at elbows/knees via IK so the torso never stretches.
+const TORSO_LEN   = 14;
+const SHOULDER_HW = 4;
+const HIP_HW      = 4;
+const UPPER_ARM   = 11;
+const FOREARM     = 11;
+const THIGH       = 12;
+const SHIN        = 12;
+
+// Limbs (drawn first so the body covers their joints with the torso)
+const armL = svgEl('path', { stroke: '#ff7040', 'stroke-width': 3.4, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+const armR = svgEl('path', { stroke: '#ff7040', 'stroke-width': 3.4, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+const legL = svgEl('path', { stroke: '#2a3a55', 'stroke-width': 3.8, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+const legR = svgEl('path', { stroke: '#2a3a55', 'stroke-width': 3.8, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+
+// Body group — torso, head, helmet, harness, chalk bag — drawn in BODY-LOCAL coords.
+// (Origin = body center; -y = toward hands; +y = toward feet.)
+const bodyG = svgEl('g');
+bodyG.innerHTML = `
+  <ellipse cx="-1" cy="13" rx="2.6" ry="2.4" fill="#c8b890"/>
+  <ellipse cx="-1" cy="11.9" rx="1.6" ry="0.55" fill="#0a0805" opacity="0.6"/>
+  <path d="M -5.5 -7 L -5 7 L 5 7 L 5.5 -7 Z"
+        fill="#ff7040" stroke="#a04020" stroke-width="0.5"/>
+  <line x1="0" y1="-7" x2="0" y2="7" stroke="#a04020" stroke-width="0.4" opacity="0.5"/>
+  <rect x="-5.5" y="6.4" width="11" height="2.2" fill="#1a1410" rx="0.5"/>
+  <rect x="-5.5" y="6.6" width="11" height="0.5" fill="#ff9050" opacity="0.55"/>
+  <circle cx="0" cy="8" r="1" fill="none" stroke="#aaa" stroke-width="0.6"/>
+  <rect x="-1.3" y="-9.5" width="2.6" height="2.6" fill="#e8c098"/>
+  <circle cx="0" cy="-13" r="3.2" fill="#e8c098"/>
+  <path d="M -4.2 -13.3 Q -4.2 -18.5 0 -18.5 Q 4.2 -18.5 4.2 -13.3 Z"
+        fill="#d83020" stroke="#702010" stroke-width="0.5"/>
+  <rect x="-4.2" y="-14.4" width="8.4" height="0.9" fill="#902010"/>
+  <line x1="-2" y1="-17.5" x2="-2" y2="-15.5" stroke="#400" stroke-width="0.5"/>
+  <line x1="0"  y1="-18"   x2="0"  y2="-15.5" stroke="#400" stroke-width="0.5"/>
+  <line x1="2"  y1="-17.5" x2="2"  y2="-15.5" stroke="#400" stroke-width="0.5"/>
+`;
+
+// Hands and feet (on top of everything)
+const handL = svgEl('circle', { r: 2.4, fill: '#e8c098' });
+const handR = svgEl('circle', { r: 2.4, fill: '#e8c098' });
+const footL = svgEl('ellipse', { rx: 3.4, ry: 1.4, fill: '#0a0805' });
+const footR = svgEl('ellipse', { rx: 3.4, ry: 1.4, fill: '#0a0805' });
+
+[legL, legR, armL, armR, bodyG, footL, footR, handL, handR]
+  .forEach(e => climber.appendChild(e));
+
+const C = { armL, armR, legL, legR, bodyG, handL, handR, footL, footR };
+
+// Two-segment IK. Returns the joint position so the limb can bend rather than stretch.
+// (bdirX, bdirY) is the direction the joint should bend toward (in world coords).
+function ikJoint(sx, sy, ex, ey, l1, l2, bdirX, bdirY) {
+  const dx = ex - sx, dy = ey - sy;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.001) return { jx: sx, jy: sy };
+  if (d >= l1 + l2) {
+    // overstretched — keep the joint on the straight line at distance l1
+    return { jx: sx + dx * (l1 / d), jy: sy + dy * (l1 / d) };
+  }
+  const a = (d * d + l1 * l1 - l2 * l2) / (2 * d);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  const ux = dx / d, uy = dy / d;
+  // Project bend direction onto the perpendicular of S→E
+  const dot = bdirX * ux + bdirY * uy;
+  let ppx = bdirX - dot * ux;
+  let ppy = bdirY - dot * uy;
+  const plen = Math.hypot(ppx, ppy);
+  if (plen < 0.001) { ppx = -uy; ppy = ux; }
+  else { ppx /= plen; ppy /= plen; }
+  return { jx: sx + ux * a + ppx * h, jy: sy + uy * a + ppy * h };
+}
+
+// returns the four grip points at ROUTE index r.
+// hands grip ROUTE[r], feet stand on ROUTE[r-1] (or the ground for r=0)
+function getGripsR(r) {
+  const safe = k => Math.max(0, Math.min(ROUTE.length - 1, k));
+  const handHold = ROUTE[safe(r)];
+  const footHold = r <= 0 ? GROUND_POS : ROUTE[safe(r - 1)];
+  return {
+    handL: { x: handHold.x - 4, y: handHold.y + 1 },
+    handR: { x: handHold.x + 4, y: handHold.y + 1 },
+    footL: { x: footHold.x - 4, y: footHold.y },
+    footR: { x: footHold.x + 4, y: footHold.y },
+  };
+}
+
+// Render the climber from grip positions. Torso is a fixed shape; arms/legs
+// bend at elbows/knees to reach hands/feet — they never stretch.
+// `loose`    — limbs currently OFF the wall (Set of 'handL'|'handR'|'footL'|'footR')
+// `releases` — limbs in the middle of a release animation (mapping name → { startX, startY, t0 })
+//              their contribution to the body axis fades out as they swing toward the dangling target,
+//              so the climber's body shifts smoothly instead of snapping.
+function setPose(g, loose = new Set(), releases = {}) {
+  // weight ∈ [0,1]: 1 = fully gripping, 0 = fully released, partial during the release animation
+  function limbWeight(name) {
+    if (!loose.has(name)) return 1;
+    const r = releases[name];
+    if (!r) return 0;
+    const p = Math.min(1, (performance.now() - r.t0) / LIMB_RELEASE_DUR);
+    return Math.max(0, 1 - p);
+  }
+  const wHL = limbWeight('handL'), wHR = limbWeight('handR');
+  const wFL = limbWeight('footL'), wFR = limbWeight('footR');
+  const wH = wHL + wHR, wF = wFL + wFR;
+
+  let midX, midY, bdx, bdy;
+  if (wH > 0 && wF > 0) {
+    const handsX = (g.handL.x * wHL + g.handR.x * wHR) / wH;
+    const handsY = (g.handL.y * wHL + g.handR.y * wHR) / wH;
+    const feetX  = (g.footL.x * wFL + g.footR.x * wFR) / wF;
+    const feetY  = (g.footL.y * wFL + g.footR.y * wFR) / wF;
+    midX = (handsX + feetX) / 2; midY = (handsY + feetY) / 2;
+    const bx = handsX - feetX, by = handsY - feetY;
+    const blen = Math.hypot(bx, by) || 1;
+    bdx = bx / blen; bdy = by / blen;
+  } else if (wH > 0) {
+    midX = (g.handL.x * wHL + g.handR.x * wHR) / wH;
+    midY = (g.handL.y * wHL + g.handR.y * wHR) / wH + TORSO_LEN/2 + 6;
+    bdx = 0; bdy = -1;
+  } else if (wF > 0) {
+    midX = (g.footL.x * wFL + g.footR.x * wFR) / wF;
+    midY = (g.footL.y * wFL + g.footR.y * wFR) / wF - TORSO_LEN/2 - 6;
+    bdx = 0; bdy = -1;
+  } else {
+    midX = (g.handL.x + g.handR.x + g.footL.x + g.footR.x) / 4;
+    midY = (g.handL.y + g.handR.y + g.footL.y + g.footR.y) / 4;
+    bdx = 0; bdy = -1;
+  }
+
+  // body group rotation
+  const angle = Math.atan2(bdx, -bdy) * 180 / Math.PI;
+  C.bodyG.setAttribute('transform',
+    `translate(${midX.toFixed(2)}, ${midY.toFixed(2)}) rotate(${angle.toFixed(2)})`);
+
+  // body-local → world
+  const l2w = (lx, ly) => ({
+    x: midX - bdy * lx - bdx * ly,
+    y: midY + bdx * lx - bdy * ly,
+  });
+
+  // shoulders/hips
+  const sL = l2w(-SHOULDER_HW, -TORSO_LEN / 2);
+  const sR = l2w( SHOULDER_HW, -TORSO_LEN / 2);
+  const hL = l2w(-HIP_HW,       TORSO_LEN / 2);
+  const hR = l2w( HIP_HW,       TORSO_LEN / 2);
+
+  // dangling targets for each loose limb (hand/foot hangs below shoulder/hip)
+  const armDangle = (UPPER_ARM + FOREARM) * 0.85;
+  const legDangle = (THIGH + SHIN) * 0.85;
+  const dangle = {
+    handL: { x: sL.x - 4, y: sL.y + armDangle },
+    handR: { x: sR.x + 4, y: sR.y + armDangle },
+    footL: { x: hL.x - 4, y: hL.y + legDangle },
+    footR: { x: hR.x + 4, y: hR.y + legDangle },
+  };
+  // For limbs in active release: interpolate from where the limb was when it lost grip
+  // toward the dangling target, with a quadratic ease-in (gravity-like acceleration).
+  function endPos(name) {
+    if (!loose.has(name)) return g[name];
+    const r = releases[name];
+    if (!r) return dangle[name];
+    const p = Math.min(1, (performance.now() - r.t0) / LIMB_RELEASE_DUR);
+    const ease = p * p;
+    return {
+      x: r.startX + (dangle[name].x - r.startX) * ease,
+      y: r.startY + (dangle[name].y - r.startY) * ease,
+    };
+  }
+  const eg = {
+    handL: endPos('handL'), handR: endPos('handR'),
+    footL: endPos('footL'), footR: endPos('footR'),
+  };
+
+  // pin hands/feet to effective positions
+  C.handL.setAttribute('cx', eg.handL.x); C.handL.setAttribute('cy', eg.handL.y);
+  C.handR.setAttribute('cx', eg.handR.x); C.handR.setAttribute('cy', eg.handR.y);
+  C.footL.setAttribute('cx', eg.footL.x); C.footL.setAttribute('cy', eg.footL.y + 1);
+  C.footR.setAttribute('cx', eg.footR.x); C.footR.setAttribute('cy', eg.footR.y + 1);
+
+  // bend directions in body local frame, projected back to world
+  const leftDirX  =  bdy, leftDirY  = -bdx;
+  const rightDirX = -bdy, rightDirY =  bdx;
+  // for loose limbs, bend toward gravity so the limb hangs naturally
+  const bAL = loose.has('handL') ? [-0.4, 1] : [leftDirX,  leftDirY];
+  const bAR = loose.has('handR') ? [ 0.4, 1] : [rightDirX, rightDirY];
+  const bLL = loose.has('footL') ? [-0.3, 1] : [leftDirX,  leftDirY];
+  const bLR = loose.has('footR') ? [ 0.3, 1] : [rightDirX, rightDirY];
+
+  const elL = ikJoint(sL.x, sL.y, eg.handL.x, eg.handL.y, UPPER_ARM, FOREARM, bAL[0], bAL[1]);
+  const elR = ikJoint(sR.x, sR.y, eg.handR.x, eg.handR.y, UPPER_ARM, FOREARM, bAR[0], bAR[1]);
+  const knL = ikJoint(hL.x, hL.y, eg.footL.x, eg.footL.y, THIGH,     SHIN,    bLL[0], bLL[1]);
+  const knR = ikJoint(hR.x, hR.y, eg.footR.x, eg.footR.y, THIGH,     SHIN,    bLR[0], bLR[1]);
+
+  C.armL.setAttribute('d', `M ${sL.x.toFixed(2)} ${sL.y.toFixed(2)} L ${elL.jx.toFixed(2)} ${elL.jy.toFixed(2)} L ${eg.handL.x.toFixed(2)} ${eg.handL.y.toFixed(2)}`);
+  C.armR.setAttribute('d', `M ${sR.x.toFixed(2)} ${sR.y.toFixed(2)} L ${elR.jx.toFixed(2)} ${elR.jy.toFixed(2)} L ${eg.handR.x.toFixed(2)} ${eg.handR.y.toFixed(2)}`);
+  C.legL.setAttribute('d', `M ${hL.x.toFixed(2)} ${hL.y.toFixed(2)} L ${knL.jx.toFixed(2)} ${knL.jy.toFixed(2)} L ${eg.footL.x.toFixed(2)} ${eg.footL.y.toFixed(2)}`);
+  C.legR.setAttribute('d', `M ${hR.x.toFixed(2)} ${hR.y.toFixed(2)} L ${knR.jx.toFixed(2)} ${knR.jy.toFixed(2)} L ${eg.footR.x.toFixed(2)} ${eg.footR.y.toFixed(2)}`);
+
+  // rope (only when at least feet are gripping — otherwise climber is mid-fall)
+  const belay = l2w(0, 8);
+  updateRope(belay.x, belay.y);
+}
+
+function updateRope(hipX, hipY) {
+  const sx = hipX, sy = hipY + 0.5;
+  const mx = sx - 8;
+  const my = (sy + WALL_H) / 2;
+  const ex = sx - 18;
+  const ey = WALL_H + 5;
+  rope.setAttribute('d', `M ${sx} ${sy} Q ${mx} ${my} ${ex} ${ey}`);
+}
+
+function lerpPt(a, b, k) {
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+
+let curR = CHECKPOINT_AT[0];   // current ROUTE index of the climber's hands
+let animRAF = 0;
+setPose(getGripsR(curR));
+
+// internal: animate ONE reach (curR → curR+dir) over `dur` ms
+function reachOneStep(targetR, dur, done) {
+  const oldGrips = getGripsR(curR);
+  const newGrips = getGripsR(targetR);
+  const t0 = performance.now();
+  function easeOut(k) { return 1 - Math.pow(1 - k, 3); }
+  function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+  function reach(a, b, k, lift) {
+    return {
+      x: a.x + (b.x - a.x) * k,
+      y: a.y + (b.y - a.y) * k - Math.sin(k * Math.PI) * lift,
+    };
+  }
+  function step(t) {
+    const k = clamp01((t - t0) / dur);
+    const handK = easeOut(clamp01(k / 0.55));
+    const footK = easeOut(clamp01((k - 0.45) / 0.55));
+    setPose({
+      handL: reach(oldGrips.handL, newGrips.handL, handK, 5),
+      handR: reach(oldGrips.handR, newGrips.handR, handK, 5),
+      footL: reach(oldGrips.footL, newGrips.footL, footK, 4),
+      footR: reach(oldGrips.footR, newGrips.footR, footK, 4),
+    });
+    if (k < 1) {
+      animRAF = requestAnimationFrame(step);
+    } else {
+      curR = targetR;
+      setPose(getGripsR(curR));
+      animRAF = 0;
+      done();
+    }
+  }
+  animRAF = requestAnimationFrame(step);
+}
+
+// public: move the climber to the checkpoint at index i.
+// chains one reach per ROUTE position, so the body never has to stretch.
+function moveClimberTo(i, animate = true) {
+  if (animRAF) { cancelAnimationFrame(animRAF); animRAF = 0; }
+  const target = CHECKPOINT_AT[i];
+  if (!animate || target === curR) {
+    curR = target;
+    setPose(getGripsR(curR));
+    scrollWallTo(i);
+    return;
+  }
+  function next() {
+    if (curR === target) { scrollWallTo(i); return; }
+    const dir = target > curR ? 1 : -1;
+    reachOneStep(curR + dir, 480, next);
+    // gentle scroll-along-the-way as we climb
+    if (curR % 2 === 0) scrollWallTo(i);
+  }
+  next();
+}
+
+function scrollWallTo(i) {
+  const wallRect = wall.getBoundingClientRect();
+  const wrapRect = wallWrap.getBoundingClientRect();
+  const scaleY = wallRect.height / WALL_H;
+  // center on a point a bit BELOW the active hold so the whole climber is visible
+  const focusY = (HOLD_POS[i].y + 25) * scaleY;
+  const desired = focusY - wrapRect.height * 0.5;
+  wallWrap.scrollTo({ top: Math.max(0, desired), behavior: 'smooth' });
+}
+
+function paintHolds() {
+  holdGroups.forEach(({ poly, glow }, i) => {
+    let fill = 'var(--hold-locked)';
+    let glowOn = false, glowColor = 'var(--hold-active)';
+    if (i < state.current) {
+      fill = 'var(--hold-done)';
+    } else if (i === state.current) {
+      if (state.activeIdx === i) {
+        fill = 'var(--hold-active)';
+        glowOn = true; glowColor = 'var(--hold-active)';
+      } else {
+        fill = 'var(--hold-next)';
+        glowOn = true; glowColor = 'var(--hold-next)';
+      }
+    }
+    poly.setAttribute('fill', fill);
+    if (glow) {
+      glow.setAttribute('stroke', glowColor);
+      glow.setAttribute('opacity', glowOn ? '0.8' : '0');
+    }
+  });
+}
+
+// ─────── State & UI ───────
+const state = {
+  current: 0,
+  activeIdx: 0,
+  pyodide: null,
+  rdkitLoaded: false,
+  mistakes: 0,                 // 0..3 — at 3 the climber falls
+  looseLimbs: new Set(),       // 'handL' | 'handR' | 'footL' | 'footR'
+  falling: false,
+};
+
+// order of grip releases on each failed attempt
+const FALL_ORDER = ['handR', 'footR', 'handL'];
+const LIMB_RELEASE_DUR = 700;
+const limbReleases = {};      // limbName → { startX, startY, t0 }
+let releaseRAF = 0;
+
+const codeEl = document.getElementById('code');
+const outEl = document.getElementById('output');
+const titleEl = document.getElementById('p-title');
+const bodyEl = document.getElementById('p-body');
+const tagEl = document.getElementById('p-tag');
+const whyEl = document.getElementById('p-why');
+const whyWrap = document.getElementById('p-why-wrap');
+const aiEl  = document.getElementById('p-ai');
+const aiWrap = document.getElementById('p-ai-wrap');
+const aiCopyBtn = document.getElementById('p-ai-copy');
+const mHold = document.getElementById('m-hold');
+const mGrip = document.getElementById('m-grip');
+const mPyo = document.getElementById('m-pyo');
+const runBtn = document.getElementById('run-btn');
+const hintBtn = document.getElementById('hint-btn');
+const resetBtn = document.getElementById('reset-btn');
+const loadingEl = document.getElementById('loading');
+const victoryEl = document.getElementById('victory');
+
+function selectHold(i) {
+  state.activeIdx = i;
+  const h = HOLDS[i];
+  tagEl.textContent = `HOLD ${i + 1} · ${h.tag}`;
+  titleEl.textContent = h.title;
+  bodyEl.innerHTML = h.prompt;
+
+  if (h.why) {
+    whyEl.innerHTML = h.why;
+    whyWrap.style.display = '';
+  } else {
+    whyWrap.style.display = 'none';
+  }
+  if (h.aiPrompt) {
+    aiEl.textContent = h.aiPrompt;
+    aiCopyBtn.textContent = 'copy';
+    aiCopyBtn.classList.remove('copied');
+    aiWrap.style.display = '';
+  } else {
+    aiWrap.style.display = 'none';
+  }
+
+  codeEl.value = h.starter;
+  outEl.innerHTML = '';
+  mHold.textContent = `${i + 1} / ${HOLDS.length}`;
+  updateGripUI();
+  paintHolds();
+  // pitch panel may have scrolled — bring it back to the top so the new content is visible
+  document.getElementById('pitch').scrollTop = 0;
+  codeEl.focus();
+}
+
+resetBtn.addEventListener('click', () => {
+  codeEl.value = HOLDS[state.activeIdx].starter;
+  outEl.innerHTML = '';
+});
+hintBtn.addEventListener('click', () => {
+  const h = HOLDS[state.activeIdx].hint;
+  outEl.innerHTML = `<span class="stdout">hint · ${h}</span>`;
+});
+
+aiCopyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(aiEl.textContent);
+    aiCopyBtn.textContent = 'copied';
+    aiCopyBtn.classList.add('copied');
+    setTimeout(() => {
+      aiCopyBtn.textContent = 'copy';
+      aiCopyBtn.classList.remove('copied');
+    }, 1500);
+  } catch {
+    aiCopyBtn.textContent = 'select+copy manually';
+  }
+});
+
+// Intro modal — show once per browser, but always re-openable from the title.
+const introModal = document.getElementById('intro-modal');
+const INTRO_KEY = 'cc.intro.seen';
+if (localStorage.getItem(INTRO_KEY) === '1') {
+  introModal.classList.remove('show');
+}
+document.getElementById('intro-start').addEventListener('click', () => {
+  introModal.classList.remove('show');
+  localStorage.setItem(INTRO_KEY, '1');
+});
+introModal.querySelector('.bg').addEventListener('click', () => {
+  introModal.classList.remove('show');
+  localStorage.setItem(INTRO_KEY, '1');
+});
+document.getElementById('intro-open').addEventListener('click', () => {
+  introModal.classList.add('show');
+});
+
+codeEl.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runCode();
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = codeEl.selectionStart, en = codeEl.selectionEnd;
+    codeEl.value = codeEl.value.slice(0, s) + '    ' + codeEl.value.slice(en);
+    codeEl.selectionStart = codeEl.selectionEnd = s + 4;
+  }
+});
+
+runBtn.addEventListener('click', runCode);
+victoryEl.addEventListener('click', () => location.reload());
+
+// ─────── Pyodide bootstrap ───────
+async function bootPyodide() {
+  try {
+    state.pyodide = await loadPyodide({
+      indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
+    });
+    mPyo.textContent = "python: loading sci stack…";
+    await state.pyodide.loadPackage(['numpy', 'pandas', 'scikit-learn']);
+    mPyo.textContent = "python: ready";
+    mPyo.className = "pyo ready";
+    loadingEl.classList.add('hide');
+  } catch (err) {
+    mPyo.textContent = "python: load failed";
+    mPyo.className = "pyo error";
+    loadingEl.querySelector('h2').textContent = "Pyodide failed to load";
+    loadingEl.querySelector('p').textContent = String(err);
+    console.error(err);
+  }
+}
+
+// ─── runtime dispatch ───
+// Each hold can declare runtime: 'pyodide' (default) or 'remote'.
+// Remote calls POST { code, verify, token } to the user's connected Colab kernel.
+// Replace the URL below with where you've hosted runner.ipynb on GitHub if you want
+// the "Open notebook" link in the modal to work as a one-click Colab launcher.
+// Until then, students can upload runner.ipynb manually via File → Upload notebook.
+const COLAB_NOTEBOOK_URL =
+  "https://colab.research.google.com/github/USER/REPO/blob/main/Module_3/runner.ipynb";
+
+// Persistent BYO-Colab connection — each user supplies their own kernel URL + token.
+const colab = {
+  url: (localStorage.getItem('cc.colab.url') || '').replace(/\/+$/, ''),
+  token: localStorage.getItem('cc.colab.token') || '',
+  reachable: false,
+};
+
+const mColab = document.getElementById('m-colab');
+
+// Returns { ok, detail } so callers can surface the real error.
+async function pingColab(timeoutMs = 10000) {
+  if (!colab.url) { colab.reachable = false; return { ok: false, detail: 'no URL' }; }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(colab.url + '/ping', { signal: ctrl.signal, mode: 'cors' });
+    colab.reachable = res.ok;
+    if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+    return { ok: true, detail: 'reachable' };
+  } catch (e) {
+    colab.reachable = false;
+    if (e.name === 'AbortError')
+      return { ok: false, detail: `timed out after ${timeoutMs/1000}s — tunnel may still be propagating, wait 10s and try again` };
+    if (String(e).includes('Failed to fetch'))
+      return { ok: false, detail: 'fetch blocked — if you opened this file directly, run "python3 -m http.server" and reopen via http://localhost:…' };
+    return { ok: false, detail: String(e.message || e) };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function renderColabPill() {
+  if (colab.reachable) {
+    mColab.textContent = 'colab: ready';
+    mColab.className = 'pyo ready pill-clickable';
+  } else if (colab.url) {
+    mColab.textContent = 'colab: offline';
+    mColab.className = 'pyo error pill-clickable';
+  } else {
+    mColab.textContent = 'colab: connect';
+    mColab.className = 'pyo loading pill-clickable';
+  }
+}
+
+// Modal wiring
+const colabModal = document.getElementById('colab-modal');
+const colabUrlIn = document.getElementById('colab-url-input');
+const colabTokenIn = document.getElementById('colab-token-input');
+const colabStatus = document.getElementById('colab-status');
+document.getElementById('colab-nb-link').href = COLAB_NOTEBOOK_URL;
+
+function openColabModal() {
+  colabUrlIn.value = colab.url;
+  colabTokenIn.value = colab.token;
+  setColabStatus(
+    colab.reachable ? 'ok'   :
+    colab.url       ? 'fail' : '',
+    colab.reachable ? 'connected · kernel reachable' :
+    colab.url       ? 'saved URL is not reachable. Re-run the Colab cells and re-paste.' :
+                      'not connected — paste a URL and token from the Colab runner.'
+  );
+  colabModal.classList.add('show');
+}
+function closeColabModal() { colabModal.classList.remove('show'); }
+function setColabStatus(kind, msg) {
+  colabStatus.className = kind || '';
+  colabStatus.textContent = msg;
+}
+
+mColab.addEventListener('click', openColabModal);
+document.getElementById('colab-close').addEventListener('click', closeColabModal);
+colabModal.querySelector('.bg').addEventListener('click', closeColabModal);
+
+document.getElementById('colab-connect').addEventListener('click', async () => {
+  // strip ALL whitespace (incl. NBSP, zero-width chars) — paste-from-Colab footguns
+  const url = colabUrlIn.value.replace(/\s+/g, '').replace(/\/+$/, '');
+  const token = colabTokenIn.value.replace(/\s+/g, '');
+  if (!url || !token) {
+    setColabStatus('fail', 'enter both a URL and a token.');
+    return;
+  }
+  setColabStatus('', 'pinging…  (first call after a fresh tunnel can take ~10s)');
+  const prev = { ...colab };
+  colab.url = url; colab.token = token;
+  const r = await pingColab(12000);
+  if (!r.ok) {
+    Object.assign(colab, prev);
+    setColabStatus('fail',
+      `no response from that URL.\n\n` +
+      `error: ${r.detail}\n\n` +
+      `try: open ${url}/ping in a new tab — if that returns {"ok":true}, ` +
+      `your browser is blocking cross-origin fetches (likely because this page is opened ` +
+      `via file://). Run \`python3 -m http.server\` and reopen via http://localhost:…`
+    );
+    renderColabPill();
+    return;
+  }
+  localStorage.setItem('cc.colab.url', url);
+  localStorage.setItem('cc.colab.token', token);
+  setColabStatus('ok', 'connected · kernel reachable');
+  renderColabPill();
+});
+
+document.getElementById('colab-disconnect').addEventListener('click', () => {
+  colab.url = ''; colab.token = ''; colab.reachable = false;
+  localStorage.removeItem('cc.colab.url');
+  localStorage.removeItem('cc.colab.token');
+  colabUrlIn.value = ''; colabTokenIn.value = '';
+  setColabStatus('', 'disconnected.');
+  renderColabPill();
+});
+
+// Health-check loop — polls every 30s if a URL is saved.
+setInterval(() => {
+  if (!colab.url) return;
+  pingColab(6000).then(renderColabPill);
+}, 30000);
+// Initial check
+pingColab(6000).then(renderColabPill);
+
+const PY_HARNESS = (encUser, encVerify) => `
+import sys, io, base64
+_user_code = base64.b64decode("${encUser}").decode("utf-8")
+_verify_code = base64.b64decode("${encVerify}").decode("utf-8")
+
+_buf = io.StringIO()
+_old = sys.stdout
+sys.stdout = _buf
+
+_user_globals = {"__name__": "__user__"}
+_ok = False
+_err = ""
+_phase = "user"
+try:
+    exec(compile(_user_code, "<user>", "exec"), _user_globals)
+    _phase = "verify"
+    _stdout = _buf.getvalue()
+    _verify_globals = dict(_user_globals)
+    _verify_globals["_stdout"] = _stdout
+    _verify_globals["_user_globals"] = _user_globals
+    exec(compile(_verify_code, "<verify>", "exec"), _verify_globals)
+    _ok = True
+except AssertionError as e:
+    _err = "check failed · " + (str(e) or "output did not match")
+except Exception as e:
+    _err = f"{_phase} error · {type(e).__name__}: {e}"
+finally:
+    sys.stdout = _old
+
+_stdout_final = _buf.getvalue()
+`;
+
+async function runLocal(userCode, verifyCode) {
+  if (!state.pyodide) throw new Error("Python isn't ready yet.");
+  const encUser = btoa(unescape(encodeURIComponent(userCode)));
+  const encVerify = btoa(unescape(encodeURIComponent(verifyCode)));
+  await state.pyodide.runPythonAsync(PY_HARNESS(encUser, encVerify));
+  return {
+    ok: state.pyodide.globals.get('_ok'),
+    err: state.pyodide.globals.get('_err'),
+    stdout: state.pyodide.globals.get('_stdout_final') || '',
+  };
+}
+
+async function runRemote(userCode, verifyCode) {
+  if (!colab.url || !colab.token) {
+    openColabModal();
+    throw new Error("this hold needs a remote kernel — connect your Colab first.");
+  }
+  const res = await fetch(colab.url + '/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: userCode, verify: verifyCode, token: colab.token }),
+  });
+  if (!res.ok) throw new Error(`colab ${res.status}: ${await res.text()}`);
+  return await res.json();   // { ok: bool, err: str, stdout: str }
+}
+
+async function runCode() {
+  const h = HOLDS[state.activeIdx];
+  const runtime = h.runtime || 'pyodide';
+  if (runtime === 'pyodide' && !state.pyodide) {
+    outEl.innerHTML = `<span class="fail">Python isn't ready yet.</span>`;
+    return;
+  }
+  const userCode = codeEl.value;
+  runBtn.disabled = true;
+  outEl.innerHTML = `<span class="stdout">${runtime === 'remote' ? 'running on remote kernel…' : 'running…'}</span>`;
+
+  try {
+    const { ok, err, stdout } = runtime === 'remote'
+      ? await runRemote(userCode, h.verify)
+      : await runLocal(userCode, h.verify);
+
+    let html = '';
+    if (stdout && stdout.trim()) {
+      html += `<span class="stdout">stdout:\n${escapeHtml(stdout)}</span>\n`;
+    }
+    if (ok) {
+      html += `<span class="ok">✓ send! moving up.</span>`;
+      outEl.innerHTML = html;
+      onSuccess();
+    } else {
+      html += `<span class="fail">✗ ${escapeHtml(err)}</span>`;
+      outEl.innerHTML = html;
+      onFailure();
+    }
+  } catch (e) {
+    outEl.innerHTML = `<span class="fail">runtime crash · ${escapeHtml(String(e.message || e))}</span>`;
+    onFailure();
+  } finally {
+    if (!state.falling) runBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+}
+
+function updateGripUI() {
+  const remaining = Math.max(0, 3 - state.mistakes);
+  mGrip.textContent = `${remaining} / 3`;
+  mGrip.style.color = remaining === 1 ? '#ff7070'
+                    : remaining === 2 ? '#f0d050'
+                    : '';
+}
+
+// JS-driven wall shake — restarts cleanly on every call (CSS class-toggle is unreliable on SVG)
+let shakeRAF = 0, shakeT0 = 0;
+function shakeWall() {
+  shakeT0 = performance.now();
+  if (shakeRAF) return;
+  function tick(t) {
+    const dt = t - shakeT0;
+    if (dt > 450) {
+      wall.style.transform = '';
+      shakeRAF = 0;
+      return;
+    }
+    const decay = 1 - dt / 450;
+    const x = Math.sin(dt * 0.055) * 5 * decay;
+    const y = Math.cos(dt * 0.048) * 3.5 * decay;
+    wall.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+    shakeRAF = requestAnimationFrame(tick);
+  }
+  shakeRAF = requestAnimationFrame(tick);
+}
+
+// Capture the limb's currently-rendered position and start a release animation
+// where the hand/foot drops naturally toward its dangling target.
+function releaseLimb(name) {
+  const el = name === 'handL' ? C.handL
+           : name === 'handR' ? C.handR
+           : name === 'footL' ? C.footL
+           :                    C.footR;
+  const startX = parseFloat(el.getAttribute('cx'));
+  const startY = parseFloat(el.getAttribute('cy'));
+  state.looseLimbs.add(name);
+  limbReleases[name] = { startX, startY, t0: performance.now() };
+  startReleaseLoop();
+  shakeWall();
+}
+
+function startReleaseLoop() {
+  if (releaseRAF) return;
+  function tick(t) {
+    let active = false;
+    for (const name in limbReleases) {
+      const p = (t - limbReleases[name].t0) / LIMB_RELEASE_DUR;
+      if (p >= 1) delete limbReleases[name];
+      else active = true;
+    }
+    setPose(getGripsR(curR), state.looseLimbs, limbReleases);
+    if (active && !state.falling) {
+      releaseRAF = requestAnimationFrame(tick);
+    } else {
+      releaseRAF = 0;
+    }
+  }
+  releaseRAF = requestAnimationFrame(tick);
+}
+
+// A failed code check.
+//   1st fail: release one hand
+//   2nd fail: release one foot
+//   3rd fail: drop immediately, no separate limb release
+function onFailure() {
+  if (state.falling) return;
+  state.mistakes++;
+  updateGripUI();
+
+  if (state.mistakes >= 3) {
+    shakeWall();
+    triggerFall();
+    return;
+  }
+  releaseLimb(FALL_ORDER[state.mistakes - 1]);
+}
+
+// Drop the climber straight down in whatever pose he's in. Rope falls with him.
+function triggerFall() {
+  if (state.falling) return;
+  state.falling = true;
+  runBtn.disabled = true;
+  if (animRAF) { cancelAnimationFrame(animRAF); animRAF = 0; }
+  if (releaseRAF) { cancelAnimationFrame(releaseRAF); releaseRAF = 0; }
+
+  // pose is FROZEN — no more setPose calls during the fall
+  outEl.innerHTML = `<span class="fail">✗ FALL — back to base camp.</span>`;
+
+  // approximate the start y so we know when he's off-screen
+  const startY = ROUTE[Math.min(curR, ROUTE.length - 1)].y;
+  const t0 = performance.now();
+  function step(t) {
+    const dt = (t - t0) / 1000;
+    const fallY = 0.5 * 1700 * dt * dt;
+    const tr = `translate(0, ${fallY.toFixed(1)})`;
+    climber.setAttribute('transform', tr);
+    rope.setAttribute('transform', tr);
+    if (startY + fallY > WALL_H + 80) {
+      onFallComplete();
+      return;
+    }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function onFallComplete() {
+  setTimeout(() => {
+    state.current = 0;
+    state.activeIdx = 0;
+    state.mistakes = 0;
+    state.looseLimbs.clear();
+    for (const k in limbReleases) delete limbReleases[k];
+    state.falling = false;
+    runBtn.disabled = false;
+    curR = CHECKPOINT_AT[0];
+    climber.removeAttribute('transform');
+    rope.removeAttribute('transform');
+    setPose(getGripsR(curR));
+    paintHolds();
+    selectHold(0);
+    scrollWallTo(0);
+    updateGripUI();
+  }, 700);
+}
+
+function onSuccess() {
+  if (state.activeIdx !== state.current) return; // already past it
+  // climber stuck the move — regrip any released limbs and reset grip strength
+  if (state.looseLimbs.size > 0) {
+    state.looseLimbs.clear();
+    setPose(getGripsR(curR), state.looseLimbs);
+  }
+  state.mistakes = 0;
+  updateGripUI();
+  state.current++;
+  paintHolds();
+  if (state.current >= HOLDS.length) {
+    moveClimberTo(HOLDS.length - 1);
+    setTimeout(() => victoryEl.classList.add('show'), 800);
+    return;
+  }
+  setTimeout(() => {
+    moveClimberTo(state.current);
+    setTimeout(() => selectHold(state.current), 300);
+  }, 600);
+}
+
+// init
+selectHold(0);
+moveClimberTo(0, false);
+setTimeout(() => scrollWallTo(0), 100);
+bootPyodide();
+</script>
+</body>
+</html>
