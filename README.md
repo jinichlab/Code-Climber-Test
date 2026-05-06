@@ -20,15 +20,16 @@ Made for chemistry and biochemistry students learning Python alongside the scien
 > Once this repo is published on GitHub Pages, the game is a single URL. You don't install anything on your computer. You only need a free Google account (which you already have if you've used Gmail or Drive).
 
 1. Open the game: **`https://jinichlab.github.io/Code-Climber-Test/codeclimber_rdkit.html`**
-   *(Note: this URL only works once the repo is made public **or** the org has GitHub Pages enabled on a paid plan — see the "Private repo caveat" below.)*
-2. **Holds 1–3** run in your browser, no setup needed.
-3. **Holds 4–12** need a real Python kernel for RDKit and PyTorch. The game will prompt you when you reach hold 4. Click the **colab: connect** pill in the top right and follow the on-screen instructions:
+2. **Sign in with Google** when prompted. The game records your name, email, the holds you complete, and your final code per hold to the instructor's grade sheet — see [What we record](#what-we-record) below.
+3. **Pick your climber** — five legendary climbers to choose from (Tommy Caldwell, Alex Honnold, Emily Harrington, Lynn Hill, Dean Potter), each with their own quirks. Tommy is the default; you can change later via the *Change climber* link in the intro modal.
+4. **Holds 1–3** run in your browser, no setup needed.
+5. **Holds 4–12** need a real Python kernel for RDKit and PyTorch. The game will prompt you when you reach hold 4. Click the **colab: connect** pill in the top right and follow the on-screen instructions:
    - The modal opens a Colab notebook for you in a new tab
    - In Colab: **Runtime → Run all** (about 1–3 minutes the first time while it installs RDKit, PyTorch, etc.)
    - The last cell prints a **URL** and a **Token** — copy both back into the game and click **Test & Save**
-4. Climb. **Three wrong answers** on a hold and your climber falls back to base camp.
+6. Climb. **Three wrong answers** on a hold and your climber falls. Lose all your lives and the climber dies — your *Best* hold (top score) resets, but the holds you've already passed in the backend remain on your record.
 
-That's it. Total setup: open a link, click "Run all," copy two strings.
+That's it. Total setup: open a link, sign in, click "Run all," copy two strings.
 
 ### 💻 Option B — run on your own computer
 
@@ -61,6 +62,29 @@ Double-click the launch script for your platform:
 - **Linux**: `launch.sh`
 
 It starts a local web server and opens the game in your browser.
+
+---
+
+## What we record
+
+The game logs your progress to your instructor's Google Sheet so they can grade and see who's stuck. To avoid asking you to type your name and risking typos, we use **Sign in with Google** for identity. Specifically:
+
+- **From your Google account**: your `sub` (a stable Google user ID), email, name, and profile picture. We do **not** see your password, contacts, or anything else in your Drive/Mail.
+- **From the game**: which holds you've passed, your latest working code for each hold, how many tries each hold took, the climber you picked, and timestamps.
+
+We do **not** record:
+- Anything you type that doesn't successfully pass a hold (your draft code stays in your browser)
+- Anything from your Google account beyond the four fields above
+
+Click your identity pill (top-right of the header) and confirm to sign out. Sign-out clears your local session; previously logged progress on the instructor's Sheet stays.
+
+---
+
+## Lives, deaths, and characters
+
+- **Tommy / Emily / Lynn**: 3 lives. Each fall adds visible damage (bandages, blood, torn clothes, dirt). The third fall is fatal — *YOU DIED* appears, your climber respawns at base camp with full lives, and the on-screen *Best* hold resets to 0 (your backend record is preserved).
+- **Alex Honnold**: 1 life. Free-soloist — no rope, no helmet, every fall is a death.
+- **Dean Potter**: ∞ lives. Carries his dog Whisper in a backpack with white BASE-jumping goggles, and a parachute deploys when he falls. Never dies.
 
 ---
 
@@ -114,19 +138,14 @@ That's the design — you have **3 wrong answers** before falling. Hand-off at f
 ### The game looks tiny / cramped
 The wall is designed for a wider browser window. Try expanding the window or reloading after resizing.
 
----
+### "Access blocked: Authorization Error" / `origin_mismatch` on sign-in
+The page's URL isn't registered as an authorized origin on the OAuth client. Instructors: open Google Cloud Console → Credentials → your OAuth client → *Authorized JavaScript origins* and add the exact origin the page is served from (e.g. `https://jinichlab.github.io` for Pages, `http://localhost:8765` for the launch scripts). Save, wait ~2 minutes, hard reload.
 
-## Private repo caveat
+### Sign-in popup blocked / nothing happens when I click "Sign in with Google"
+Allow popups for the page in your browser, or click the popup-blocked icon in your address bar to allow this one. If you've configured Sign in with Google in the past and chose "Disable Auto-Select," that may also intercept the flow — try a different browser to confirm.
 
-This repo is currently **private**. Two distribution paths require either making it public or paying for GitHub Pro/Team:
-
-1. **The GitHub Pages URL above** — Pages is free for public repos only. On a private free-plan repo it 404s.
-2. **The one-click "Open notebook" link in Colab** (`https://colab.research.google.com/github/jinichlab/...`) — Colab can only auto-load notebooks from public repos, or after each user manually authenticates Colab to read your private repo.
-
-While the repo is private, the working distribution path is:
-- **Hand the files to students** (zip them up, share via Drive/email/Slack), and have them either run the **launch scripts** locally or **upload `runner.ipynb` to Colab manually** via *File → Upload notebook*.
-
-Flip to public any time via *Settings → General → Danger Zone → Change visibility* — none of the code in this repo is sensitive, the curriculum is generic.
+### "Google sign-in is not configured" message in the modal
+You're using a build of the HTML where `GOOGLE_CLIENT_ID` is empty. If you're an instructor forking this repo, see the [For instructors / forking this](#for-instructors--forking-this) section to set up your own OAuth client.
 
 ---
 
@@ -166,6 +185,46 @@ To deploy on GitHub Pages:
    ```
    This makes the "Open notebook" link in the connect modal a true one-click launcher.
 
+### Setting up Google sign-in (your own OAuth client)
+
+The HTML uses Google Identity Services to authenticate students. You need an OAuth Client ID, which is free and takes ~5 minutes:
+
+1. Go to https://console.cloud.google.com/ → create a project (or pick an existing one).
+2. **APIs & Services → OAuth consent screen** → External, fill in app name, user support email, developer email; save.
+3. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → *Web application*.
+4. Under **Authorized JavaScript origins**, add every URL the game runs from. At minimum:
+   - `https://YOUR-USERNAME.github.io` (your Pages origin, no trailing slash)
+   - `http://localhost:8765` and `http://127.0.0.1:8765` (the launch scripts default to port 8765)
+5. Copy the resulting Client ID (looks like `1234-abc.apps.googleusercontent.com`).
+6. Open `codeclimber_rdkit.html` and replace the `GOOGLE_CLIENT_ID` constant near the top of the `<script>`:
+   ```js
+   const GOOGLE_CLIENT_ID = '1234-abc.apps.googleusercontent.com';
+   ```
+7. If you forget any origin you'll see `Error 400: origin_mismatch` on sign-in — just go back and add it. Changes take ~2 minutes to propagate.
+
+### Setting up the grade-book backend (Google Sheet + Apps Script)
+
+The game POSTs progress events to a Google Apps Script web app, which writes to a Google Sheet you own. Setup:
+
+1. Create a new Google Sheet (anything, the script will create the `Roster` and `Submissions` tabs on first request).
+2. **Extensions → Apps Script** in that Sheet. Replace the contents of `Code.gs` with the script bundled in this repo at [`apps_script/Code.gs`](apps_script/Code.gs) and save.
+3. **Deploy → New deployment** → cog icon → **Web app**:
+   - Execute as: **Me**
+   - Who has access: **Anyone** (this is required so students who aren't signed into your Google account can POST progress; the URL is unguessable and only handled events are accepted)
+4. Authorize the script when prompted (you'll see a "Google hasn't verified this app" warning — click *Advanced → Go to ... (unsafe)*; this is normal for personal Apps Script web apps).
+5. Copy the deployment URL and paste it into the `BACKEND_URL` constant in `codeclimber_rdkit.html`:
+   ```js
+   const BACKEND_URL = 'https://script.google.com/macros/s/AKfy.../exec';
+   ```
+6. Sanity check: paste the URL into a browser. You should see `{"ok":true,"message":"Code Climber backend is alive."}`.
+
+After deploying, **edit the existing deployment** (Manage deployments → pencil → New version → Deploy) for any future Apps Script updates so the URL stays the same. Creating a "New deployment" gives you a different URL and you'll have to update `BACKEND_URL` again.
+
+### What the Sheet looks like
+
+- **Roster** tab — one row per student, primary key is the Google `sub` ID. Columns: `sub | email | name | max_hold | holds_passed | created_at | last_active | character`. `max_hold` is the highest hold they've ever passed (Math.max — never decreases, even after death).
+- **Submissions** tab — one row per (student, hold) successful pass. Columns: `timestamp | sub | email | name | hold | hold_title | attempts | code`. Re-passes overwrite the row, so the latest working code is what you see. Character changes are also logged here as `hold = 0` rows with `hold_title = "character_chosen: <name>"` for an audit trail; filter `hold > 0` to see only code submissions.
+
 ---
 
 ## Files in this folder
@@ -175,6 +234,7 @@ To deploy on GitHub Pages:
 | `codeclimber_rdkit.html` | The full RDKit-powered game (the one to play) |
 | `codeclimber.html` | All-browser version, no Colab required (uses simplified equivalents) |
 | `runner.ipynb` | Colab notebook that boots a Python kernel with RDKit + PyTorch |
+| `apps_script/Code.gs` | The Google Apps Script that records progress to a Sheet (paste into Extensions → Apps Script of your bound Sheet) |
 | `README.md` | This file |
 | `install.sh` / `install.ps1` | One-line installers for Mac/Linux/Windows |
 | `launch.command` / `launch.bat` / `launch.sh` | Click-to-play after files are downloaded |
